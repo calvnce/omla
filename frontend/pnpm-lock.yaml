@@ -32,6 +32,9 @@ importers:
       next-auth:
         specifier: 5.0.0-beta.19
         version: 5.0.0-beta.19(next@15.0.0-rc.0(react-dom@19.0.0-rc-f994737d14-20240522(react@19.0.0-rc-f994737d14-20240522))(react@19.0.0-rc-f994737d14-20240522))(react@19.0.0-rc-f994737d14-20240522)
+      pnpm:
+        specifier: ^9.5.0
+        version: 9.5.0
       postcss:
         specifier: 8.4.38
         version: 8.4.38
@@ -845,6 +848,11 @@ packages:
   pirates@4.0.6:
     resolution: {integrity: sha512-saLsH7WeYYPiD25LDuLRRY/i+6HaPYr6G1OUlN39otzkSTxKnubR9RTxS3/Kk50s1g2JTgFwWQDQyplC5/SHZg==}
     engines: {node: '>= 6'}
+
+  pnpm@9.5.0:
+    resolution: {integrity: sha512-FAA2gwEkYY1iSiGHtQ0EKJ1aCH8ybJ7fwMzXM9dsT1LDoxPU/BSHlKKp2BVTAWAE5nQujPhQZwJopzh/wiDJAw==}
+    engines: {node: '>=18.12'}
+    hasBin: true
 
   postcss-import@15.1.0:
     resolution: {integrity: sha512-hpr+J05B2FVYUAXHeK1YyI267J/dDDhMU6B6civm8hSY1jYJnBXxzKDKDswzJmtLHryrjhnDjqqp/49t8FALew==}
@@ -1829,6 +1837,8 @@ snapshots:
   pify@2.3.0: {}
 
   pirates@4.0.6: {}
+
+  pnpm@9.5.0: {}
 
   postcss-import@15.1.0(postcss@8.4.38):
     dependencies:
