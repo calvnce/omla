@@ -108,7 +108,7 @@ class OrderLine(db.Model):
     product_id: Mapped[int] = mapped_column(Integer, ForeignKey('products.id'), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     total_price: Mapped[float] = mapped_column(Numeric, nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default='ACTIVE')
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default='active')
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=True, default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, nullable=True, default=datetime.now)
 

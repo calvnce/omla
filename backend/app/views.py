@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify, session, url_for,send_from_directory, current_app
 from flask_sqlalchemy.query import Query
+from sqlalchemy import extract, func
 from werkzeug.datastructures.file_storage import FileStorage
 from app.models import db, User, Artisan, Customer, Product, ProductImage, Review, Order, OrderLine
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -233,17 +234,17 @@ def register_customer():
 @swag_from(login_docs)
 def login():
     req_data = request.get_json()
-    username = req_data.get('username')
+    email = req_data.get('email')
     password = req_data.get('password')
 
-    if username is None or password is None:
+    if email is None or password is None:
         return jsonify({'error': 'Username or password are required'}), 400
 
     try:
-        user: User  = User.query.filter_by(username=username).first()
+        user: User  = User.query.filter_by(email=email).first()
         res = {}
         if user and check_password_hash(pwhash=user.password, password=password):
-            if user.role=='ARTISAN':
+            if user.role=='artisan':
                 session['artisan_id'] = user.id
                 artisan:Artisan = Artisan.query.get_or_404(user.id)
 
@@ -415,7 +416,90 @@ def get_products():
         current_app.logger.error(f'{str(ex)}')
         return jsonify({'error': 'Internal server error'}), 500
 
+@bp.route('/products/<int:artisan_id>', methods=['GET'])
+@swag_from(get_products_docs)
+def get_artisan_products(artisan_id):
+    category = request.args.get('category')
+    sort_by = request.args.get('sort_by', 'id')
+    order = request.args.get('order', 'asc')
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 20))
 
+    query: Query = Product.query
+
+    try:
+        if category:
+            query = query.filter_by(category=category)
+        if artisan_id:
+            query = query.filter_by(artisan_id=artisan_id)
+
+        if order == 'desc':
+            query = query.order_by(db.desc(getattr(Product, sort_by)))
+        else:
+            query = query.order_by(getattr(Product, sort_by))
+
+        total = query.count()
+        products:list[Product] = query.paginate(page=page, per_page=page_size, error_out=False,count=False).items
+
+        products_list = []
+        for product in products:
+            images = []
+            for image in product.product_images:
+                images.append({'id': image.id, 'image': to_base64(image.file_path)})
+
+            product_data = {
+                'id': product.id,
+                'name': product.name,
+                'description': product.description,
+                'category': product.category,
+                'images': images,
+                'price': round(product.price, 2),
+                'discount': round(product.discount, 2),
+                'artisan_id': product.artisan_id,
+                'created_at': product.created_at.isoformat(),
+                'updated_at': product.updated_at.isoformat()
+            }
+            products_list.append(product_data)
+
+        current_app.logger.info(f'get_artisan_products() {page_size} items fetched')
+        return jsonify({
+            "products": products_list,
+            "total": total,
+            "page": page,
+            "page_size": page_size
+        }), 200
+        
+    except Exception as ex:
+        current_app.logger.error(f'{str(ex)}')
+        return jsonify({'error': 'Internal server error'}), 500
+    
+@bp.route('/products/<int:id>', methods=['GET'])
+def get_product(id):
+    try:
+        product:Product = Product.query.get_or_404(id)
+
+        images = []
+        for image in product.product_images:
+            images.append({'id': image.id, 'image': to_base64(image.file_path)})
+
+        product_data = {
+            'id': product.id,
+            'name': product.name,
+            'description': product.description,
+            'category': product.category,
+            'images': images,
+            'price': round(product.price, 2),
+            'discount': round(product.discount, 2),
+            'artisan_id': product.artisan_id,
+            'created_at': product.created_at.isoformat(),
+            'updated_at': product.updated_at.isoformat()
+        }
+        current_app.logger.info(f'get_product() {product} fetched')
+        return jsonify(product_data), 200
+        
+    except Exception as ex:
+        current_app.logger.error(f'{str(ex)}')
+        return jsonify({'error': 'Internal server error'}), 500
 
 @bp.route('/product/update/discount/<int:id>/<float:discount>', methods=['PUT'])
 @swag_from(update_product_discount_docs)
@@ -572,7 +656,7 @@ def delete_product_images(id):
         return jsonify({'error': 'internal server error'}), 500
 
 
-@bp.route('/product/delete/<int:id>', methods=['DELETE'])
+@bp.route('/products/delete/<int:id>', methods=['DELETE'])
 @swag_from(delete_product_docs)
 def delete_product(id):
     try:
@@ -627,7 +711,7 @@ def create_order():
 
     try:
         # Create the order
-        new_order = Order(customer_id=customer_id, order_total=order_total, status='Pending')
+        new_order = Order(customer_id=customer_id, order_total=order_total, status='pending')
         db.session.add(new_order)
         db.session.flush()
 
@@ -671,7 +755,7 @@ def create_order():
         return jsonify({'error': 'Internal server error'}), 500
 
 
-@bp.route('/order/update/status/<int:id>', methods=['PUT'])
+@bp.route('/orders/update/status/<int:id>', methods=['PUT'])
 @swag_from(update_order_status_docs)
 def update_order_status(id):
     req_data = request.get_json()
@@ -691,18 +775,32 @@ def update_order_status(id):
         current_app.logger.error(f'{str(ex)}')
         return jsonify({'error': 'Internal server error'}), 500
 
+@bp.route('/orders/delete/<int:id>', methods=['DELETE'])
+def delete_order(id):
+    try:
+        order:Order = Order.query.get_or_404(id)
+        current_app.logger.error(f'{str(order)}')
+        db.session.delete(order)
+        db.session.commit()
 
+        current_app.logger.info(f'Order deleted {order}')
+        return jsonify({'message': 'Order status updated successfully'}), 200
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.error(f'{str(ex)}')
+        return jsonify({'error': 'Internal server error'}), 500
+    
 @bp.route('/order/update/cancel/orderline/<int:order_id>/<int:orderline_id>', methods=['PUT'])
 @swag_from(cancel_order_line_docs)
 def cancel_order_line(order_id, orderline_id):
     try:
         order:Order = Order.query.get_or_404(order_id)
-        if order.status not in ['CANCELLED', 'COMPLETE']:
+        if order.status not in ['cancelled', 'completed']:
             order_line:OrderLine = OrderLine.query.get_or_404(orderline_id)
-            order_line.status = 'CANCELLED'
+            order_line.status = 'cancelled'
             order.order_total -= order_line.total_price
             if order.order_total == 0.0:
-                order.status = 'CANCELLED'
+                order.status = 'cancelled'
             order_line.updated_at = datetime.datetime.now()
             order.updated_at = datetime.datetime.now()
         else:
@@ -804,6 +902,129 @@ def get_orders():
             "page": page,
             "page_size": page_size
         }), 200
+    except Exception as ex:
+        current_app.logger.error(f'{str(ex)}')
+        return jsonify({'error': 'Internal server error'}), 500
+    
+
+@bp.route('/orders/artisan/<int:artisan_id>', methods=['GET'])
+@swag_from(get_orders_docs)
+def get__artisan_orders(artisan_id):
+    status = request.args.get('status')
+    sort_by = request.args.get('sort_by', 'id')
+    order = request.args.get('order', 'asc')
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 10))
+
+    # The idea is to extract only orders made on products which are produced by this artisan_id
+    query: Query = db.session.query(Order).join(
+        OrderLine).join(
+            Product).filter(
+                Product.artisan_id == artisan_id)
+    try:
+        if status:
+            query = query.filter_by(status=status)
+        if order == 'desc':
+            query = query.order_by(db.desc(getattr(Order, sort_by)))
+        else:
+            query = query.order_by(getattr(Order, sort_by))
+
+        total: int = query.count()
+        orders:list[Order] = query.paginate(page=page, per_page=page_size, error_out=False,count=False)
+
+        order_list = []
+        for order in orders:
+            order_data = {
+                "id": order.id,
+                "customer_id": order.customer_id,
+                "status": order.status,
+                "order_total": round(order.order_total, 2),
+                "ordered_at": order.ordered_at.isoformat(),
+                "updated_at": order.updated_at.isoformat(),
+                "order_lines": [
+                    {
+                        "id": line.id,
+                        "product_id": line.product_id,
+                        "name": Product.query.get_or_404(line.product_id).name,
+                        "quantity": line.quantity,
+                        "image": to_base64(ProductImage.query.filter_by(product_id=line.product_id).first_or_404().file_path),
+                        "total_price": round(line.total_price, 2),
+                        "status": line.status,
+                        "created_at": line.created_at.isoformat(),
+                        "updated_at": line.updated_at.isoformat()
+                    } for line in order.order_lines
+                ]
+            }
+            order_list.append(order_data)
+
+        return jsonify({
+            "orders": order_list,
+            "total": total,
+            "page": page,
+            "page_size": page_size
+        }), 200
+    except Exception as ex:
+        current_app.logger.error(f'{str(ex)}')
+        return jsonify({'error': 'Internal server error'}), 500
+    
+@bp.route('/orders/artisan/<int:artisan_id>/all', methods=['GET'])
+@swag_from(get_orders_docs)
+def get__all_artisan_orders(artisan_id):
+    try:
+        # The idea is to extract only orders made on products which are produced by this artisan_id
+        query: Query = db.session.query(Order)
+        total: int = query.count()
+
+        return jsonify({
+            "total": total
+        }), 200
+    except Exception as ex:
+        current_app.logger.error(f'{str(ex)}')
+        return jsonify({'error': 'Internal server error'}), 500
+
+@bp.route('/generic/artisan/stats/<int:artisan_id>', methods=['GET'])
+def get_generic_artisan_stats(artisan_id):
+    try:
+        current_year = datetime.datetime.now().year
+
+        # Total completed orders for this year
+        completed_orders_total = db.session.query(func.sum(Order.order_total)).select_from(Order).join(OrderLine).join(Product).filter(
+            Product.artisan_id == artisan_id,
+            Order.status == 'completed',
+            extract('year', Order.ordered_at) == current_year
+        ).scalar() or 0
+
+        # Total pending orders for this year
+        pending_orders_total = db.session.query(func.sum(Order.order_total)).select_from(Order).join(OrderLine).join(Product).filter(
+            Product.artisan_id == artisan_id,
+            Order.status == 'pending',
+            extract('year', Order.ordered_at) == current_year
+        ).scalar() or 0
+
+        # Total orders for this year
+        orders_count = db.session.query(func.count(func.distinct(Order.id))).select_from(Order).join(OrderLine).join(Product, Product.id == OrderLine.product_id).filter(
+            Product.artisan_id == artisan_id,
+            extract('year', Order.ordered_at) == current_year
+        ).scalar() or 0
+
+        # Number of products for the artisan
+        products_count = db.session.query(func.count(Product.id)).filter(
+            Product.artisan_id == artisan_id
+        ).scalar()
+
+        # Number of unique customers who bought from the artisan
+        unique_customers_count = db.session.query(func.count(func.distinct(Order.customer_id))).select_from(Order).join(OrderLine).join(Product).filter(
+            Product.artisan_id == artisan_id
+        ).scalar()
+
+        return jsonify({
+            'completed_orders_total': round(completed_orders_total, 2),
+            'pending_orders_total': round(pending_orders_total, 2),
+            'orders_count': orders_count,
+            'products_count': products_count,
+            'unique_customers_count': unique_customers_count
+        }), 200
+
     except Exception as ex:
         current_app.logger.error(f'{str(ex)}')
         return jsonify({'error': 'Internal server error'}), 500
