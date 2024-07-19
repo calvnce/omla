@@ -5,11 +5,24 @@ import { z } from 'zod';
 import { sql } from '@vercel/postgres';
 import type { User } from '@/app/lib/definitions';
 import bcrypt from 'bcrypt';
+import { baseurl } from './app/lib/utils';
  
-async function getUser(email: string): Promise<User | undefined> {
+async function getUser(email: string, password: string): Promise<User | undefined> {
   try {
-    const user = await sql<User>`SELECT * FROM users WHERE email=${email}`;
-    return user.rows[0];
+    const url = `${baseurl}login`;
+    const response = await fetch(url,{
+      method: 'POST',
+      body:JSON.stringify({
+        email:email,
+        password:password
+      }),
+      headers:{
+        'Content-Type': 'application/json',
+      }
+    });
+    if (response.ok)
+      return await response.json();
+    return undefined;
   } catch (error) {
     console.error('Failed to fetch user:', error);
     throw new Error('Failed to fetch user.');
@@ -27,11 +40,9 @@ export const { auth, signIn, signOut } = NextAuth({
  
         if (parsedCredentials.success) {
           const { email, password } = parsedCredentials.data;
-          const user = await getUser(email);
+          const user = await getUser(email,password);
           if (!user) return null;
-          const passwordsMatch = await bcrypt.compare(password, user.password);
- 
-          if (passwordsMatch) return user;
+          return user;
         }
         console.log('Invalid credentials');
         return null;

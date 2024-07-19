@@ -2,37 +2,36 @@ import {
   BanknotesIcon,
   ClockIcon,
   UserGroupIcon,
-  InboxIcon,
+  TicketIcon,
+  TruckIcon
 } from '@heroicons/react/24/outline';
 import { lusitana } from '@/app/ui/fonts';
-import { fetchCardData } from '@/app/lib/data';
+import { getArtisanStats } from '@/app/lib/stats';
+import { auth } from '@/auth';
+import { formatCurrency } from '@/app/lib/utils';
+
 
 const iconMap = {
   collected: BanknotesIcon,
   customers: UserGroupIcon,
   pending: ClockIcon,
-  invoices: InboxIcon,
+  orders: TruckIcon,
+  products:TicketIcon
 };
 
 export default async function CardWrapper() {
-  const {
-    numberOfCustomers,
-    numberOfInvoices,
-    totalPaidInvoices,
-    totalPendingInvoices
-  } = await fetchCardData();
-  
+  const session = await auth();
+  const user = session?.user;
+  const stats = await getArtisanStats(user?.id);
   return (
     <>
-      {/* NOTE: Uncomment this code in Chapter 9 */}
-
-      <Card title="Collected" value={totalPaidInvoices} type="collected" />
-      <Card title="Pending" value={totalPendingInvoices} type="pending" />
-      <Card title="Total Invoices" value={numberOfInvoices} type="invoices" />
+      <Card title="Completed" value={formatCurrency(stats['completed_orders_total']*100 ?? '0')} type="collected" />
+      <Card title="Pending" value={formatCurrency(stats['pending_orders_total']*100 ?? '0')} type="pending" />
+      <Card title="Total Orders" value={stats['orders_count']} type="orders" />
       <Card
-        title="Total Customers"
-        value={numberOfCustomers}
-        type="customers"
+        title="Total Produts"
+        value={stats['products_count']}
+        type="products"
       />
     </>
   );
@@ -45,7 +44,7 @@ export function Card({
 }: {
   title: string;
   value: number | string;
-  type: 'invoices' | 'customers' | 'pending' | 'collected';
+  type: 'orders' | 'customers' | 'pending' | 'collected' | 'products';
 }) {
   const Icon = iconMap[type];
 

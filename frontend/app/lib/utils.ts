@@ -1,7 +1,9 @@
 import { Revenue } from './definitions';
 
+export const baseurl = 'http://127.0.0.1:5000/api/';
+
 export const formatCurrency = (amount: number) => {
-  return (amount / 100).toLocaleString('en-US', {
+  return (amount).toLocaleString('en-US', {
     style: 'currency',
     currency: 'USD',
   });
